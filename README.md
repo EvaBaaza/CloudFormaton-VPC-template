@@ -1,1 +1,1 @@
-# CloudFormaton-VPC-template
+# CloudFormation-VPC-template
