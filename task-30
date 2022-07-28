@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Mappings:
+  AMImapping:
+    us-east-1:
+      test: "ami-0dc2d3e4c0f9ebd18"
+      prod: "ami-0dc2d3e4c0f9ebd18"
+Parameters:
+  TestInstanceTypeParam:
+    Description: Instance type for TEST instances
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+    ConstraintDescription: Should be t3.micro
+  ProdInstanceTypeParam:
+    Description: Instance type for PROD instances
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.small
+      - t3.medium
+    ConstraintDescription:  t3.small
+Resources:
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'false'
+      EnableDnsHostnames: 'false'
+      InstanceTenancy: default
+      Tags:
+        - Key: env
+          Value: eva-lab
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  AttachGateway: 
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref myVPC
+  EnvSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "us-east-1a"
+      Tags:
+        - Key: env
+          Value: eva-lab
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTable
+  EnvSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref EnvSubnet
+  TestSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+        GroupDescription: Allow http to client host
+        VpcId:
+          Ref: myVPC
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: 0.0.0.0/0
+        SecurityGroupEgress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: 0.0.0.0/0
+  ProdSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+        GroupDescription: Allow http to client host
+        VpcId:
+          Ref: myVPC
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: 169.232.1.18/32  
+        SecurityGroupEgress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: 0.0.0.0/0
+  TestEC2Instance: 
+    Type: AWS::EC2::Instance
+    DependsOn: TestSecurityGroup
+    Properties: 
+      ImageId: !FindInMap [AMImapping, !Ref "AWS::Region", "test"]
+      KeyName: "A4L"
+      InstanceType: !Ref TestInstanceTypeParam
+      SubnetId: !Ref EnvSubnet 
+      SecurityGroupIds: 
+        - !Ref TestSecurityGroup
+      BlockDeviceMappings: 
+        - DeviceName: "/dev/sdm"
+          Ebs:
+            VolumeType: "gp2"
+            DeleteOnTermination: "false"
+            VolumeSize: "20"
+  ProdEC2Instance: 
+      Type: AWS::EC2::Instance
+      Properties: 
+        ImageId: !FindInMap [AMImapping, !Ref "AWS::Region", "test"]
+        KeyName: "Examtopic1"
+        InstanceType: !Ref ProdInstanceTypeParam
+        SubnetId: !Ref EnvSubnet
+        SecurityGroupIds: 
+          - !Ref ProdSecurityGroup
+        BlockDeviceMappings: 
+          - DeviceName: "/dev/sdm"
+            Ebs: 
+              VolumeType: "gp2"
+              DeleteOnTermination: "false"
+              VolumeSize: "20"
+Outputs:
+  ProdInstanceID:
+    Description: "Production instance ID."
+    Value: !Ref ProdEC2Instance
+    Export:
+      Name: 'ProdEc2Instance'
